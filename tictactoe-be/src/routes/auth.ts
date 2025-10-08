@@ -5,7 +5,7 @@ import { HonoVariables } from '../types/supabase.js';
 const auth = new Hono<{ Variables: HonoVariables }>();
 
 
-auth.get('/health', (c) => {
+auth.get('/', (c) => {
   return c.json({ status: 'ok' });
 });
 
