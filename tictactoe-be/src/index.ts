@@ -3,10 +3,10 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import playerRoutes from './routes/player.js';
-import leaderboardRoutes from './routes/leaderboard.js';
-import { HonoVariables } from './types/supabase.js';
+import authRoutes from './routes/auth';
+import playerRoutes from './routes/player';
+import leaderboardRoutes from './routes/leaderboard';
+import { HonoVariables } from './types/supabase';
 
 dotenv.config();
 
@@ -45,16 +45,14 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error' }, 500);
 });
 
-// Important: Use PORT from Railway environment
 const PORT = parseInt(process.env.PORT || '3001');
 
 console.log(`Starting server on port ${PORT}`);
 
-// Start server with @hono/node-server
 serve({
   fetch: app.fetch,
   port: PORT,
-  hostname: '0.0.0.0' // Important for Railway
+  hostname: '0.0.0.0'
 }, (info) => {
   console.log(`🚀 Server running on http://0.0.0.0:${info.port}`);
 });

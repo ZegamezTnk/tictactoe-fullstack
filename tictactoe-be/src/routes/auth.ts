@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { supabaseClient } from '../config/supabase.js';
-import { HonoVariables } from '../types/supabase.js';
+import { supabaseClient } from '../config/supabase';
+import { HonoVariables } from '../types/supabase';
 
 const auth = new Hono<{ Variables: HonoVariables }>();
 

@@ -1,8 +1,8 @@
-import { Hono } from "hono";
-import { supabase } from "../config/supabase.js";
-import { authMiddleware } from "../middleware/auth.js";
-import { UpdateStatsRequest } from "../types/index.js";
-import { HonoVariables, SupabaseUser } from "../types/supabase.js";
+import { Hono } from 'hono';
+import { supabase } from '../config/supabase';
+import { authMiddleware } from '../middleware/auth';
+import { UpdateStatsRequest } from '../types/index';
+import { HonoVariables, SupabaseUser } from '../types/supabase';
 
 const player = new Hono<{ Variables: HonoVariables }>();
 

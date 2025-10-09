@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { supabase } from '../config/supabase.js';
-import { HonoVariables } from '../types/supabase.js';
+import { supabase } from '../config/supabase';
+import { HonoVariables } from '../types/supabase';
 
 const leaderboard = new Hono<{ Variables: HonoVariables }>();
 
