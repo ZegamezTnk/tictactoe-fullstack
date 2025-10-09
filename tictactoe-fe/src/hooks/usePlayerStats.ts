@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { GameStats } from '../types';
-import playerService, { PlayerData } from '../services/playerService';
+import playerService from '../services/playerService';
 import { SCORES } from '../utils/constants';
 
 export const usePlayerStats = (userId: string | undefined) => {

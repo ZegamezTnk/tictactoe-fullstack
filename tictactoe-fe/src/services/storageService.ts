@@ -1,4 +1,4 @@
-import { type PlayerData, type GameStats } from '../types';
+import { type PlayerData} from '../types';
 
 const STORAGE_PREFIX = 'player_';
 
