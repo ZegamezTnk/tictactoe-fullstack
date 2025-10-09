@@ -12,14 +12,51 @@ dotenv.config();
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
-// Middleware
-app.use('*', logger());
+// ✅ CORS Middleware - รองรับหลาย origins
 app.use('*', cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin) => {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'https://tictactoe-frontend-lhd18wa4s-zegamezs-projects.vercel.app',
+      process.env.FRONTEND_URL,
+      process.env.CORS_ORIGIN,
+    ].filter(Boolean);
+
+    // อนุญาตถ้าไม่มี origin (Postman, mobile apps)
+    if (!origin) return 'http://localhost:5173';
+
+    // อนุญาตถ้า origin ตรงกับ whitelist
+    const isAllowed = allowedOrigins.some(allowed => 
+      origin === allowed || origin.startsWith(allowed)
+    );
+
+    if (isAllowed) {
+      console.log('✅ Allowed origin:', origin);
+      return origin;
+    }
+
+    console.log('❌ Blocked origin:', origin);
+    return 'http://localhost:5173'; // fallback
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization']
+  allowHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400, // 24 hours
 }));
+
+// Logger Middleware
+app.use('*', logger());
+
+// Custom logging
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  console.log(`→ ${c.req.method} ${c.req.url}`);
+  console.log(`  Origin: ${c.req.header('origin') || 'none'}`);
+  await next();
+  const end = Date.now();
+  console.log(`← ${c.res.status} (${end - start}ms)`);
+});
 
 // Health check
 app.get('/', (c) => {
@@ -27,7 +64,11 @@ app.get('/', (c) => {
     message: 'Tic-Tac-Toe API with Supabase',
     status: 'running',
     version: '1.0.0',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: {
+      frontend: process.env.FRONTEND_URL,
+      origin: process.env.CORS_ORIGIN,
+    }
   });
 });
 
@@ -36,23 +77,33 @@ app.route('/api/auth', authRoutes);
 app.route('/api/player', playerRoutes);
 app.route('/api/leaderboard', leaderboardRoutes);
 
-// 404
-app.notFound((c) => c.json({ error: 'Not Found' }, 404));
-
-// Error Handler
+// Error handling
 app.onError((err, c) => {
-  console.error('Server Error:', err);
-  return c.json({ error: 'Internal Server Error' }, 500);
+  console.error('❌ Error:', err.message);
+  return c.json({ 
+    error: err.message,
+    status: 'error' 
+  }, 500);
 });
 
-const PORT = parseInt(process.env.PORT || '3001');
+// 404 handler
+app.notFound((c) => {
+  return c.json({ 
+    error: 'Not Found',
+    path: c.req.url 
+  }, 404);
+});
 
-console.log(`Starting server on port ${PORT}`);
+const PORT = process.env.PORT || 3001;
 
-serve({
-  fetch: app.fetch,
+console.log(`\n🚀 Starting Hono.js server...`);
+console.log(`📍 Port: ${PORT}`);
+console.log(`🌍 CORS Origins:`);
+console.log(`   - http://localhost:5173`);
+console.log(`   - ${process.env.FRONTEND_URL || 'not set'}`);
+console.log(`   - ${process.env.CORS_ORIGIN || 'not set'}\n`);
+
+export default {
   port: PORT,
-  hostname: '0.0.0.0'
-}, (info) => {
-  console.log(`🚀 Server running on http://0.0.0.0:${info.port}`);
-});
+  fetch: app.fetch,
+};
