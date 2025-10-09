@@ -1,85 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { useAuth } from './hooks/useAuth';
-import { usePlayerStats } from './hooks/usePlayerStats';
-import { useGame } from './hooks/useGame';
-import { BotDifficulty } from './types';
-import { LoginScreen } from './components/auth/LoginScreen';
-import { Header } from './components/dashboard/Header';
-import { StatsPanel } from './components/dashboard/StatsPanel';
-import { HowToPlay } from './components/dashboard/HowToPlay';
-import { Board } from './components/game/Board';
-import { GameInfo } from './components/game/GameInfo';
-import { DifficultySelector } from './components/game/DifficultySelector';
-import { Button } from './components/common/Button';
-import { Card } from './components/common/Card';
-import authService from './services/authService';
+import { useAuth } from '../hooks/useAuth';
+import { usePlayerStats } from '../hooks/usePlayerStats';
+import { useGame } from '../hooks/useGame';
+import { BotDifficulty } from '../types';
+import { Header } from '../components/dashboard/Header';
+import { StatsPanel } from '../components/dashboard/StatsPanel';
+import { HowToPlay } from '../components/dashboard/HowToPlay';
+import { Board } from '../components/game/Board';
+import { GameInfo } from '../components/game/GameInfo';
+import { DifficultySelector } from '../components/game/DifficultySelector';
+import { Button } from '../components/common/Button';
+import { Card } from '../components/common/Card';
 
-const App: React.FC = () => {
-  const { user, isLoading: authLoading,  logout } = useAuth();
+export const GameScreen: React.FC = () => {
+  const { user, logout } = useAuth();
   const { score, winStreak, stats, loading: statsLoading, updateStats } = usePlayerStats(user?.id);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('medium');
   const { gameState, handleSquareClick, resetGame } = useGame(updateStats, difficulty);
-  const [isProcessingCallback, setIsProcessingCallback] = useState(false);
-
-  // Handle OAuth callback
-  useEffect(() => {
-    const handleOAuthCallback = async () => {
-      const hash = window.location.hash;
-      const urlParams = new URLSearchParams(window.location.search);
-      
-      if (hash || urlParams.has('code') || urlParams.has('access_token')) {
-        console.log('🔄 Processing OAuth callback...');
-        setIsProcessingCallback(true);
-        
-        try {
-          await authService.handleCallback();
-          console.log('✅ Callback processed successfully');
-          
-          // Clean URL after successful callback
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (error) {
-          console.error('❌ Callback error:', error);
-        } finally {
-          setTimeout(() => {
-            setIsProcessingCallback(false);
-          }, 500);
-        }
-      }
-    };
-
-    handleOAuthCallback();
-  }, []);
 
   const handleDifficultyChange = (newDifficulty: BotDifficulty) => {
     setDifficulty(newDifficulty);
     resetGame();
   };
 
-  // Loading state
-  if (authLoading || statsLoading || isProcessingCallback) {
+  if (statsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-600">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-4"></div>
-          <div className="text-xl text-white">
-            {isProcessingCallback ? 'Processing authentication...' : 'Loading...'}
-          </div>
+          <div className="text-xl text-white">Loading stats...</div>
         </div>
       </div>
     );
   }
 
-  // Login screen
-  if (!user) {
-    return <LoginScreen/>;
-  }
-
-  // Game screen
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-600 flex flex-col p-3 sm:p-4">
       <div className="flex-shrink-0">
-        <Header user={user} onLogout={logout} />
+        <Header user={user!} onLogout={logout} />
       </div>
 
       <div className="flex-1 grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
@@ -134,5 +93,3 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-export default App;

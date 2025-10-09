@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+// import { User } from '@supabase/supabase-js';
 import authService, { AuthUser } from '../services/authService';
 import { supabaseClient } from '../config/supabase';
 
@@ -32,6 +33,14 @@ export const useAuth = () => {
       }
     };
 
+    // Set timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (isLoading && mounted) {
+        console.warn('⚠️ Auth loading timeout');
+        setIsLoading(false);
+      }
+    }, 3000);
+
     initAuth();
 
     // Listen for auth state changes
@@ -59,7 +68,6 @@ export const useAuth = () => {
 
             case 'TOKEN_REFRESHED':
               console.log('🔄 Token refreshed');
-              // Reload session after token refresh
               const refreshedUser = await authService.loadSession();
               setUser(refreshedUser);
               break;
@@ -82,6 +90,7 @@ export const useAuth = () => {
 
     return () => {
       mounted = false;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, []);
