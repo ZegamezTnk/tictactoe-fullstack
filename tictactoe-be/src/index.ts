@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
-import playerRoutes from './routes/player';
+import playerRoutes from './routes/player;
 import leaderboardRoutes from './routes/leaderboard';
 import { HonoVariables } from './types/supabase';
 
@@ -12,51 +12,49 @@ dotenv.config();
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
-// ✅ CORS Middleware - รองรับหลาย origins
-app.use('*', cors({
-  origin: (origin) => {
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'http://localhost:3001',
-      'https://tictactoe-frontend-lhd18wa4s-zegamezs-projects.vercel.app',
-      process.env.FRONTEND_URL,
-      process.env.CORS_ORIGIN,
-    ].filter(Boolean);
-
-    // อนุญาตถ้าไม่มี origin (Postman, mobile apps)
-    if (!origin) return 'http://localhost:5173';
-
-    // อนุญาตถ้า origin ตรงกับ whitelist
-    const isAllowed = allowedOrigins.some(allowed => 
-      origin === allowed || origin.startsWith(allowed)
-    );
-
-    if (isAllowed) {
-      console.log('✅ Allowed origin:', origin);
-      return origin;
-    }
-
-    console.log('❌ Blocked origin:', origin);
-    return 'http://localhost:5173'; // fallback
-  },
-  credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400, // 24 hours
-}));
-
 // Logger Middleware
 app.use('*', logger());
 
-// Custom logging
-app.use('*', async (c, next) => {
-  const start = Date.now();
-  console.log(`→ ${c.req.method} ${c.req.url}`);
-  console.log(`  Origin: ${c.req.header('origin') || 'none'}`);
-  await next();
-  const end = Date.now();
-  console.log(`← ${c.res.status} (${end - start}ms)`);
-});
+// CORS Middleware - รองรับ Vercel deployments ทุก URL
+app.use('*', cors({
+  origin: (origin) => {
+    console.log('🌍 Request from origin:', origin);
+
+    // อนุญาตถ้าไม่มี origin (API calls, Postman)
+    if (!origin) {
+      console.log('✅ No origin - allowed');
+      return '*';
+    }
+
+    // Allowed patterns
+    const allowedPatterns = [
+      /^http:\/\/localhost:\d+$/,
+      /^https:\/\/tictactoe-frontend-.*-zegamezs-projects\.vercel\.app$/,
+      /^https:\/\/tictactoe-frontend-.*\.vercel\.app$/,
+    ];
+
+    // Check patterns
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+
+    // Check ENV variables
+    const envOrigins = [
+      process.env.FRONTEND_URL,
+      process.env.CORS_ORIGIN,
+    ].filter(Boolean);
+    const isEnvAllowed = envOrigins.some(allowed => origin === allowed);
+
+    if (isAllowed || isEnvAllowed) {
+      console.log('✅ Origin allowed:', origin);
+      return origin;
+    }
+
+    console.log('❌ Origin blocked:', origin);
+    return origin;
+  },
+  credentials: true,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Health check
 app.get('/', (c) => {
@@ -66,8 +64,8 @@ app.get('/', (c) => {
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     cors: {
-      frontend: process.env.FRONTEND_URL,
-      origin: process.env.CORS_ORIGIN,
+      frontend_url: process.env.FRONTEND_URL || 'not set',
+      cors_origin: process.env.CORS_ORIGIN || 'not set',
     }
   });
 });
@@ -77,33 +75,33 @@ app.route('/api/auth', authRoutes);
 app.route('/api/player', playerRoutes);
 app.route('/api/leaderboard', leaderboardRoutes);
 
-// Error handling
+// 404 Handler
+app.notFound((c) => c.json({ error: 'Not Found', path: c.req.path }, 404));
+
+// Error Handler
 app.onError((err, c) => {
-  console.error('❌ Error:', err.message);
-  return c.json({ 
-    error: err.message,
-    status: 'error' 
-  }, 500);
+  console.error('❌ Server Error:', err);
+  return c.json({ error: 'Internal Server Error', message: err.message }, 500);
 });
 
-// 404 handler
-app.notFound((c) => {
-  return c.json({ 
-    error: 'Not Found',
-    path: c.req.url 
-  }, 404);
-});
+// Port configuration
+const PORT = parseInt(process.env.PORT || '3001');
 
-const PORT = process.env.PORT || 3001;
-
-console.log(`\n🚀 Starting Hono.js server...`);
+console.log('\n🚀 Hono.js Server Starting...');
+console.log('================================');
 console.log(`📍 Port: ${PORT}`);
-console.log(`🌍 CORS Origins:`);
-console.log(`   - http://localhost:5173`);
-console.log(`   - ${process.env.FRONTEND_URL || 'not set'}`);
-console.log(`   - ${process.env.CORS_ORIGIN || 'not set'}\n`);
+console.log(`🌍 CORS Patterns:`);
+console.log(`   - localhost:*`);
+console.log(`   - tictactoe-frontend-*-zegamezs-projects.vercel.app`);
+console.log(`   - tictactoe-frontend-*.vercel.app`);
+console.log(`   - ENV: ${process.env.FRONTEND_URL || 'not set'}`);
+console.log('================================\n');
 
-export default {
-  port: PORT,
+// Start server with @hono/node-server
+serve({
   fetch: app.fetch,
-};
+  port: PORT,
+  hostname: '0.0.0.0' // Important for Railway
+}, (info) => {
+  console.log(`✅ Server running on http://0.0.0.0:${info.port}`);
+});
