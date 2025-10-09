@@ -16,7 +16,7 @@ import { Card } from './components/common/Card';
 import authService from './services/authService';
 
 const App: React.FC = () => {
-  const { user, isLoading: authLoading,  logout } = useAuth();
+  const { user, isLoading: authLoading,logout } = useAuth();
   const { score, winStreak, stats, loading: statsLoading, updateStats } = usePlayerStats(user?.id);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('medium');
   const { gameState, handleSquareClick, resetGame } = useGame(updateStats, difficulty);
@@ -56,6 +56,19 @@ const App: React.FC = () => {
     resetGame();
   };
 
+  // Loading state with timeout
+  useEffect(() => {
+    // Timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (authLoading) {
+        console.warn('⚠️ Auth loading timeout - forcing to show login screen');
+        window.location.reload();
+      }
+    }, 5000); // 5 seconds timeout
+
+    return () => clearTimeout(timeout);
+  }, [authLoading]);
+
   // Loading state
   if (authLoading || statsLoading || isProcessingCallback) {
     return (
@@ -65,6 +78,10 @@ const App: React.FC = () => {
           <div className="text-xl text-white">
             {isProcessingCallback ? 'Processing authentication...' : 'Loading...'}
           </div>
+          <div className="text-sm text-white/60 mt-2">
+            {authLoading && 'Checking authentication...'}
+            {statsLoading && 'Loading stats...'}
+          </div>
         </div>
       </div>
     );
@@ -72,7 +89,7 @@ const App: React.FC = () => {
 
   // Login screen
   if (!user) {
-    return <LoginScreen/>;
+    return <LoginScreen />;
   }
 
   // Game screen
@@ -82,11 +99,11 @@ const App: React.FC = () => {
         <Header user={user} onLogout={logout} />
       </div>
 
-      <div className="flex-1 grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
+      <div className="flex-1 grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-hidden min-h-0">
         
         {/* Left Column - Game Board */}
-        <div className="flex flex-col overflow-hidden">
-          <Card className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex flex-col overflow-hidden min-h-0">
+          <Card className="flex-1 flex flex-col overflow-hidden">
             <GameInfo
               message={gameState.message}
               isPlayerTurn={gameState.isPlayerTurn}

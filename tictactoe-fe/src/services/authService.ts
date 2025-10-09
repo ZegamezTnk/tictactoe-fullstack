@@ -184,25 +184,32 @@ class AuthService {
    * Logout
    */
   async logout() {
-    try {
-      console.log('👋 Logging out...');
-      
-      await supabaseClient.auth.signOut();
-      
-      this.user = null;
-      this.token = null;
-      this.sessionLoaded = false;
+  try {
+    console.log('👋 Logging out...');
+    
+    await supabaseClient.auth.signOut();
+    
+    this.user = null;
+    this.token = null;
+    this.sessionLoaded = false;
 
-      console.log('✅ Logged out successfully');
-    } catch (error) {
-      console.error('❌ Logout error:', error);
-      
-      // Force clear even on error
-      this.user = null;
-      this.token = null;
-      this.sessionLoaded = false;
-    }
+    console.log('✅ Logged out successfully');
+    
+    // Force reload to clear all states
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 100);
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    
+    // Force clear even on error
+    this.user = null;
+    this.token = null;
+    this.sessionLoaded = false;
+    
+    window.location.href = '/';
   }
+}
 
   /**
    * Get current user
