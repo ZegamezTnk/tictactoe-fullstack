@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { serve } from '@hono/node-server'; // เพิ่มบรรทัดนี้
+import { serve } from '@hono/node-server';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import playerRoutes from './routes/player.js';
@@ -26,7 +26,8 @@ app.get('/', (c) => {
   return c.json({
     message: 'Tic-Tac-Toe API with Supabase',
     status: 'running',
-    version: '1.0.0'
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -44,12 +45,16 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error' }, 500);
 });
 
+// Important: Use PORT from Railway environment
 const PORT = parseInt(process.env.PORT || '3001');
 
+console.log(`Starting server on port ${PORT}`);
 
+// Start server with @hono/node-server
 serve({
   fetch: app.fetch,
-  port: PORT
+  port: PORT,
+  hostname: '0.0.0.0' // Important for Railway
 }, (info) => {
-  console.log(`🚀 Server running on http://localhost:${info.port}`);
+  console.log(`🚀 Server running on http://0.0.0.0:${info.port}`);
 });
