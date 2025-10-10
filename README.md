@@ -37,10 +37,10 @@ A full-stack Tic-Tac-Toe web application with OAuth 2.0 authentication, real-tim
 ## 🚀 Quick Start (Local Development)
 
 ### 1️⃣ Clone Repository
-```bash
+
 git clone https://github.com/yourusername/tictactoe-fullstack.git
 cd tictactoe-fullstack
-2️⃣ Install Dependencies
+###2️⃣ Install Dependencies
 npm install
 cd tictactoe-fe && npm install
 cd ../tictactoe-be && npm install
