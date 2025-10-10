@@ -17,7 +17,28 @@ export const GameScreen: React.FC = () => {
   const { user, logout } = useAuth();
   const { score, winStreak, stats, loading: statsLoading, updateStats } = usePlayerStats(user?.id);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('medium');
-  const { gameState, handleSquareClick, resetGame } = useGame(updateStats, difficulty);
+
+  // Create onGameEnd wrapper
+  const onGameEnd = async (result: 'win' | 'loss' | 'draw') => {
+    console.log('🎮 Game ended with result:', result);
+    
+    try {
+      // Map 'loss' to 'lose' for updateStats
+      const statsResult = result === 'loss' ? 'lose' : result;
+      
+      await updateStats(statsResult, difficulty);
+      
+      // Check if bonus should be awarded (3 wins in a row)
+      const bonusAwarded = result === 'win' && winStreak >= 2;
+      
+      return { bonusAwarded };
+    } catch (error) {
+      console.error('Failed to update stats:', error);
+      return { bonusAwarded: false };
+    }
+  };
+
+  const { gameState, handleSquareClick, resetGame } = useGame(onGameEnd, difficulty);
 
   const handleDifficultyChange = (newDifficulty: BotDifficulty) => {
     setDifficulty(newDifficulty);
@@ -41,11 +62,11 @@ export const GameScreen: React.FC = () => {
         <Header user={user!} onLogout={logout} />
       </div>
 
-      <div className="flex-1 grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
+      <div className="flex-1 grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-hidden min-h-0">
         
         {/* Left Column - Game Board */}
-        <div className="flex flex-col overflow-hidden">
-          <Card className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex flex-col overflow-hidden min-h-0">
+          <Card className="flex-1 flex flex-col overflow-hidden">
             <GameInfo
               message={gameState.message}
               isPlayerTurn={gameState.isPlayerTurn}
@@ -58,7 +79,7 @@ export const GameScreen: React.FC = () => {
               disabled={!gameState.gameOver && gameState.squares.some(s => s !== null)}
             />
 
-            <div className="flex-1 flex items-center justify-center my-2 sm:my-4">
+            <div className="flex-1 flex items-center justify-center my-2 sm:my-4 min-h-0">
               <Board
                 squares={gameState.squares}
                 winningLine={gameState.winningLine}
@@ -67,7 +88,7 @@ export const GameScreen: React.FC = () => {
               />
             </div>
 
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 pb-2">
               <Button onClick={resetGame} icon={RefreshCw} fullWidth>
                 New Game
               </Button>
@@ -76,8 +97,8 @@ export const GameScreen: React.FC = () => {
         </div>
 
         {/* Right Column - Stats + How to Play */}
-        <div className="flex flex-col overflow-hidden">
-          <Card className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex flex-col overflow-hidden min-h-0">
+          <Card className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-shrink-0 mb-4">
               <StatsPanel score={score} winStreak={winStreak} stats={stats} />
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { usePlayerStats } from './hooks/usePlayerStats';
@@ -16,14 +16,13 @@ import { Card } from './components/common/Card';
 import authService from './services/authService';
 
 const App: React.FC = () => {
-  const { user, isLoading: authLoading,logout } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const { score, winStreak, stats, loading: statsLoading, updateStats } = usePlayerStats(user?.id);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('medium');
-  const { gameState, handleSquareClick, resetGame } = useGame(updateStats, difficulty);
   const [isProcessingCallback, setIsProcessingCallback] = useState(false);
 
   // Handle OAuth callback
-  useEffect(() => {
+  React.useEffect(() => {
     const handleOAuthCallback = async () => {
       const hash = window.location.hash;
       const urlParams = new URLSearchParams(window.location.search);
@@ -35,8 +34,6 @@ const App: React.FC = () => {
         try {
           await authService.handleCallback();
           console.log('✅ Callback processed successfully');
-          
-          // Clean URL after successful callback
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (error) {
           console.error('❌ Callback error:', error);
@@ -51,23 +48,34 @@ const App: React.FC = () => {
     handleOAuthCallback();
   }, []);
 
+  // Create onGameEnd wrapper for useGame
+  const onGameEnd = async (result: 'win' | 'loss' | 'draw') => {
+    console.log('🎮 Game ended with result:', result);
+    
+    try {
+      // Map 'loss' to 'lose' for updateStats
+      const statsResult = result === 'loss' ? 'lose' : result;
+      
+      await updateStats(statsResult, difficulty);
+      
+      // Check if bonus should be awarded (3 wins in a row)
+      const bonusAwarded = result === 'win' && winStreak >= 2;
+      
+      console.log('✅ Stats updated. Bonus:', bonusAwarded);
+      
+      return { bonusAwarded };
+    } catch (error) {
+      console.error('❌ Failed to update stats:', error);
+      return { bonusAwarded: false };
+    }
+  };
+
+  const { gameState, handleSquareClick, resetGame } = useGame(onGameEnd, difficulty);
+
   const handleDifficultyChange = (newDifficulty: BotDifficulty) => {
     setDifficulty(newDifficulty);
     resetGame();
   };
-
-  // Loading state with timeout
-  useEffect(() => {
-    // Timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      if (authLoading) {
-        console.warn('⚠️ Auth loading timeout - forcing to show login screen');
-        window.location.reload();
-      }
-    }, 5000); // 5 seconds timeout
-
-    return () => clearTimeout(timeout);
-  }, [authLoading]);
 
   // Loading state
   if (authLoading || statsLoading || isProcessingCallback) {
@@ -116,7 +124,7 @@ const App: React.FC = () => {
               disabled={!gameState.gameOver && gameState.squares.some(s => s !== null)}
             />
 
-            <div className="flex-1 flex items-center justify-center my-2 sm:my-4">
+            <div className="flex-1 flex items-center justify-center my-2 sm:my-4 min-h-0">
               <Board
                 squares={gameState.squares}
                 winningLine={gameState.winningLine}
@@ -125,7 +133,7 @@ const App: React.FC = () => {
               />
             </div>
 
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 pb-2">
               <Button onClick={resetGame} icon={RefreshCw} fullWidth>
                 New Game
               </Button>
@@ -134,8 +142,8 @@ const App: React.FC = () => {
         </div>
 
         {/* Right Column - Stats + How to Play */}
-        <div className="flex flex-col overflow-hidden">
-          <Card className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex flex-col overflow-hidden min-h-0">
+          <Card className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-shrink-0 mb-4">
               <StatsPanel score={score} winStreak={winStreak} stats={stats} />
             </div>
