@@ -4,9 +4,8 @@ import type { HonoVariables } from "../types/supabase";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
-// Auth middleware
+// ✅ Auth middleware
 app.use("*", async (c, next) => {
- 
   const authHeader = c.req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -25,6 +24,7 @@ app.use("*", async (c, next) => {
       return c.json({ error: "Invalid token" }, 401);
     }
 
+    // ✔ เก็บ user object
     c.set("user", user);
     await next();
   } catch (error) {
@@ -33,19 +33,16 @@ app.use("*", async (c, next) => {
   }
 });
 
-// ✅ Helper function: Get or create player
+// ✅ Get or create player (ส่ง user object)
 async function getOrCreatePlayer(user: any) {
   try {
-    // Try to get existing player
-    
     const { data: player, error } = await supabase
       .from("players")
       .select("*")
       .eq("user_id", user.id)
       .single();
 
-    if (error && error.code === "PGRST116") {
-      // Player not found, create new one
+    if (error?.code === "PGRST116") {
       console.log("🆕 Creating new player for:", user.id);
 
       const { data: newPlayer, error: createError } = await supabase
@@ -68,23 +65,19 @@ async function getOrCreatePlayer(user: any) {
           wins: 0,
           losses: 0,
           draws: 0,
+          total_games: 0,
+          last_played: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .select()
         .single();
 
-      if (createError) {
-        console.error("❌ Failed to create player:", createError);
-        throw createError;
-      }
-
-      console.log("✅ Player created:", newPlayer);
+      if (createError) throw createError;
       return newPlayer;
     }
 
     if (error) throw error;
-
     return player;
   } catch (error) {
     console.error("❌ getOrCreatePlayer error:", error);
@@ -92,21 +85,11 @@ async function getOrCreatePlayer(user: any) {
   }
 }
 
-// GET /api/player/stats
+// ✅ GET /api/player/stats — ใช้ user จาก middleware
 app.get("/stats", async (c) => {
   try {
-    const userId = c.req.query("userId");
-
-    if (!userId) {
-      return c.json({ error: "userId is required" }, 400);
-    }
-
-    console.log("📊 Getting stats for:", userId);
-
-    // ✅ Get or create player
-    const player = await getOrCreatePlayer(userId);
-
-    console.log("✅ Stats found:", player);
+    const user = c.get("user");
+    const player = await getOrCreatePlayer(user);
     return c.json(player);
   } catch (error) {
     console.error("❌ Get stats error:", error);
@@ -114,80 +97,52 @@ app.get("/stats", async (c) => {
   }
 });
 
-// POST /api/player/stats
+// ✅ POST /api/player/stats — ไม่ต้องส่ง userId
 app.post("/stats", async (c) => {
   try {
-    const { userId, result, difficulty } = await c.req.json();
+    const user = c.get("user");
+    const { result, difficulty } = await c.req.json();
 
-    if (!userId || !result || !difficulty) {
+    if (!result || !difficulty) {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
-    console.log("💾 Updating stats:", { userId, result, difficulty });
+    const player = await getOrCreatePlayer(user);
 
-    // ✅ Get or create player first
-    const player = await getOrCreatePlayer(userId);
+    let { score, win_streak, wins, losses, draws } = player;
 
-    const currentScore = player.score || 0;
-    const currentWinStreak = player.win_streak || 0;
-    const wins = player.wins || 0;
-    const losses = player.losses || 0;
-    const draws = player.draws || 0;
-
-    let newScore = currentScore;
-    let newWinStreak = currentWinStreak;
-    let newWins = wins;
-    let newLosses = losses;
-    let newDraws = draws;
-
-    // Calculate new stats
     if (result === "win") {
-      newScore += 1;
-      newWinStreak += 1;
-      newWins += 1;
-      console.log("🏆 Win! New score:", newScore, "Streak:", newWinStreak);
+      score += 1;
+      win_streak += 1;
+      wins += 1;
     } else if (result === "lose") {
-      newScore = Math.max(0, newScore - 1);
-      newWinStreak = 0;
-      newLosses += 1;
-      console.log("😢 Loss! New score:", newScore);
+      score = Math.max(0, score - 1);
+      win_streak = 0;
+      losses += 1;
     } else if (result === "draw") {
-      newWinStreak = 0;
-      newDraws += 1;
-      console.log("🤝 Draw! Score unchanged");
+      win_streak = 0;
+      draws += 1;
     }
 
-    // Update player
     const { data, error } = await supabase
       .from("players")
       .update({
-        score: newScore,
-        win_streak: newWinStreak,
-        wins: newWins,
-        losses: newLosses,
-        draws: newDraws,
+        score,
+        win_streak,
+        wins,
+        losses,
+        draws,
         updated_at: new Date().toISOString(),
       })
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .select()
       .single();
 
-    if (error) {
-      console.error("❌ Update error:", error);
-      throw error;
-    }
-
-    console.log("✅ Stats updated:", data);
+    if (error) throw error;
     return c.json(data);
   } catch (error) {
     console.error("❌ Update stats error:", error);
-    return c.json(
-      {
-        error: "Failed to update stats",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
+    return c.json({ error: "Failed to update stats" }, 500);
   }
 });
 
