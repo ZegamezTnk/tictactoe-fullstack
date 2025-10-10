@@ -79,9 +79,16 @@ const onGameEnd = async (result: 'win' | 'loss' | 'draw') => {
   const { gameState, handleSquareClick, resetGame } = useGame(onGameEnd, difficulty);
 
   const handleDifficultyChange = (newDifficulty: BotDifficulty) => {
-    setDifficulty(newDifficulty);
+  console.log('🔧 Changing difficulty to:', newDifficulty);
+  
+  setDifficulty(newDifficulty);
+  
+  // ✅ ต้อง reset ก่อน แล้วรอให้ state update
+  setTimeout(() => {
     resetGame();
-  };
+    console.log('✅ Game reset with new difficulty:', newDifficulty);
+  }, 100);
+};
 
   // Loading state
   if (authLoading || statsLoading || isProcessingCallback) {

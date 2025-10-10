@@ -6,7 +6,6 @@ const app = new Hono<{ Variables: HonoVariables }>();
 
 // Auth middleware
 app.use("*", async (c, next) => {
- 
   const authHeader = c.req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -28,38 +27,48 @@ app.use("*", async (c, next) => {
     c.set("user", user);
     await next();
   } catch (error) {
-    console.error("Auth error:", error);
+    console.error("❌ Auth error:", error);
     return c.json({ error: "Authentication failed" }, 401);
   }
 });
 
-// ✅ Helper function: Get or create player
-async function getOrCreatePlayer(user: any) {
+// ✅ Helper: Get or create player
+async function getOrCreatePlayer(userId: string) {
   try {
+    console.log("🔍 Looking for player:", userId);
+
+    // Try to get existing player
     const { data: player, error } = await supabase
       .from("players")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
+    // Player not found - create new one
     if (error?.code === "PGRST116") {
-      console.log("🆕 Creating new player for:", user.id);
+      console.log("🆕 Creating new player for:", userId);
+
+      // Get user info from Supabase Auth
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.admin.getUserById(userId);
 
       const { data: newPlayer, error: createError } = await supabase
         .from("players")
         .insert({
-          user_id: user.id,
-          provider: user.app_metadata?.provider || "unknown",
-          email: user.email || null,
+          user_id: userId,
+          provider: user?.app_metadata?.provider || "unknown",
+          email: user?.email || null,
           name:
-            user.user_metadata?.name ||
-            user.user_metadata?.full_name ||
-            user.email?.split("@")[0] ||
-            null,
+            user?.user_metadata?.name ||
+            user?.user_metadata?.full_name ||
+            user?.email?.split("@")[0] ||
+            "Player",
           picture:
-            user.user_metadata?.avatar_url ||
-            user.user_metadata?.picture ||
-            null,
+            user?.user_metadata?.avatar_url ||
+            user?.user_metadata?.picture ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
           score: 0,
           win_streak: 0,
           wins: 0,
@@ -73,17 +82,28 @@ async function getOrCreatePlayer(user: any) {
         .select()
         .single();
 
-      if (createError) throw createError;
+      if (createError) {
+        console.error("❌ Create player error:", createError);
+        throw createError;
+      }
+
+      console.log("✅ Player created:", newPlayer);
       return newPlayer;
     }
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Get player error:", error);
+      throw error;
+    }
+
+    console.log("✅ Player found:", player);
     return player;
   } catch (error) {
     console.error("❌ getOrCreatePlayer error:", error);
     throw error;
   }
 }
+
 // GET /api/player/stats
 app.get("/stats", async (c) => {
   try {
@@ -95,14 +115,20 @@ app.get("/stats", async (c) => {
 
     console.log("📊 Getting stats for:", userId);
 
-    // ✅ Get or create player
+    // ✅ Get or create player (pass userId as string)
     const player = await getOrCreatePlayer(userId);
 
-    console.log("✅ Stats found:", player);
+    console.log("✅ Stats retrieved:", player);
     return c.json(player);
   } catch (error) {
     console.error("❌ Get stats error:", error);
-    return c.json({ error: "Failed to get stats" }, 500);
+    return c.json(
+      {
+        error: "Failed to get stats",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
   }
 });
 
@@ -125,6 +151,8 @@ app.post("/stats", async (c) => {
     const wins = player.wins || 0;
     const losses = player.losses || 0;
     const draws = player.draws || 0;
+    const totalGames = player.total_games || 0;
+    let bonusAwarded = false;
 
     let newScore = currentScore;
     let newWinStreak = currentWinStreak;
@@ -137,6 +165,16 @@ app.post("/stats", async (c) => {
       newScore += 1;
       newWinStreak += 1;
       newWins += 1;
+
+      if (newWinStreak > 0 && newWinStreak % 3 === 0) {
+        newScore += 1; // Bonus point!
+        bonusAwarded = true;
+        console.log(
+          "🎁 BONUS! Win streak:",
+          newWinStreak,
+          "Extra point awarded!"
+        );
+      }
       console.log("🏆 Win! New score:", newScore, "Streak:", newWinStreak);
     } else if (result === "lose") {
       newScore = Math.max(0, newScore - 1);
@@ -158,6 +196,8 @@ app.post("/stats", async (c) => {
         wins: newWins,
         losses: newLosses,
         draws: newDraws,
+        total_games: totalGames + 1,
+        last_played: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", userId)
