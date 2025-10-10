@@ -1,169 +1,140 @@
 import { Hono } from 'hono';
 import { supabase } from '../config/supabase';
-import { authMiddleware } from '../middleware/auth';
-import { UpdateStatsRequest } from '../types/index';
-import { HonoVariables, SupabaseUser } from '../types/supabase';
+import type { HonoVariables } from '../types/supabase';
 
-const player = new Hono<{ Variables: HonoVariables }>();
+const app = new Hono<{ Variables: HonoVariables }>();
 
-player.use("/*", authMiddleware);
+// ✅ Auth middleware - ต้องมี
+app.use('*', async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
 
-player.get("/", async (c) => {
-  const user = c.get("user");
+  const token = authHeader.replace('Bearer ', '');
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      return c.json({ error: 'Invalid token' }, 401);
+    }
+    
+    c.set('user', user);
+    await next();
+  } catch (error) {
+    console.error('Auth error:', error);
+    return c.json({ error: 'Authentication failed' }, 401);
+  }
+});
 
-  const { data, error } = await supabase
-    .from("players")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") {
-      const { data: newPlayer, error: createError } = await supabase
-        .from("players")
-        .insert({
-          user_id: user.id,
-          provider: user.app_metadata.provider || "unknown",
-          email: user.email!,
-          name:
-            user.user_metadata.name ||
-            user.user_metadata.full_name ||
-            user.email!.split("@")[0],
-          picture:
-            user.user_metadata.avatar_url || user.user_metadata.picture || "",
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        console.error("Create player error:", createError);
-        return c.json({ error: "Failed to create player" }, 500);
-      }
-
-      return c.json(newPlayer);
+// ✅ GET /stats - ต้องมี route นี้
+app.get('/stats', async (c) => {
+  try {
+    const userId = c.req.query('userId');
+    
+    if (!userId) {
+      return c.json({ error: 'userId is required' }, 400);
     }
 
-    console.error("Get player error:", error);
-    return c.json({ error: "Failed to get player data" }, 500);
-  }
+    console.log('📊 Getting stats for:', userId);
 
-  return c.json(data);
+    const { data, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log('Player not found, returning default stats');
+        return c.json({
+          score: 0,
+          current_win_streak: 0,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          easyWins: 0,
+          mediumWins: 0,
+          hardWins: 0,
+        });
+      }
+      throw error;
+    }
+
+    console.log('✅ Stats found:', data);
+    return c.json(data);
+  } catch (error) {
+    console.error('❌ Get stats error:', error);
+    return c.json({ error: 'Failed to get stats' }, 500);
+  }
 });
 
-player.post("/stats", async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json<UpdateStatsRequest>();
+// ✅ POST /stats - อัพเดท stats
+app.post('/stats', async (c) => {
+  try {
+    const { userId, result, difficulty } = await c.req.json();
 
-  const { data, error } = await supabase
-    .from("players")
-    .update({
-      score: body.score,
-      win_streak: body.win_streak,
-      wins: body.wins,
-      losses: body.losses,
-      draws: body.draws,
-      total_games: body.total_games,
-      last_played: new Date().toISOString(),
-    })
-    .eq("user_id", user.id)
-    .select()
-    .single();
+    if (!userId || !result || !difficulty) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
 
-  if (error) {
-    console.error("Update stats error:", error);
-    return c.json({ error: "Failed to update stats" }, 500);
+    console.log('💾 Updating stats:', { userId, result, difficulty });
+
+    const { data: player } = await supabase
+      .from('players')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    const currentScore = player?.score || 0;
+    const currentWinStreak = player?.current_win_streak || 0;
+    const wins = player?.wins || 0;
+    const losses = player?.losses || 0;
+    const draws = player?.draws || 0;
+
+    let newScore = currentScore;
+    let newWinStreak = currentWinStreak;
+    let newWins = wins;
+    let newLosses = losses;
+    let newDraws = draws;
+
+    if (result === 'win') {
+      newScore += 1;
+      newWinStreak += 1;
+      newWins += 1;
+    } else if (result === 'lose') {
+      newScore = Math.max(0, newScore - 1);
+      newWinStreak = 0;
+      newLosses += 1;
+    } else if (result === 'draw') {
+      newWinStreak = 0;
+      newDraws += 1;
+    }
+
+    const { data, error } = await supabase
+      .from('players')
+      .upsert({
+        user_id: userId,
+        score: newScore,
+        current_win_streak: newWinStreak,
+        wins: newWins,
+        losses: newLosses,
+        draws: newDraws,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    console.log('✅ Stats updated:', data);
+    return c.json(data);
+  } catch (error) {
+    console.error('❌ Update stats error:', error);
+    return c.json({ error: 'Failed to update stats' }, 500);
   }
-
-  return c.json(data);
 });
 
-player.post("/game-history", async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json();
-
-  const { data: playerData } = await supabase
-    .from("players")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!playerData) {
-    return c.json({ error: "Player not found" }, 404);
-  }
-
-  const { data, error } = await supabase
-    .from("game_history")
-    .insert({
-      player_id: playerData.id,
-      result: body.result,
-      difficulty: body.difficulty,
-      score_change: body.score_change,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Save game history error:", error);
-    return c.json({ error: "Failed to save game history" }, 500);
-  }
-
-  return c.json(data);
-});
-
-player.get("/game-history", async (c) => {
-  const user = c.get("user");
-  const limit = parseInt(c.req.query("limit") || "20");
-
-  const { data: playerData } = await supabase
-    .from("players")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!playerData) {
-    return c.json({ error: "Player not found" }, 404);
-  }
-
-  const { data, error } = await supabase
-    .from("game_history")
-    .select("*")
-    .eq("player_id", playerData.id)
-    .order("played_at", { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.error("Get game history error:", error);
-    return c.json({ error: "Failed to get game history" }, 500);
-  }
-
-  return c.json(data);
-});
-
-// Reset stats
-player.post("/reset", async (c) => {
-  const user = c.get("user");
-
-  const { data, error } = await supabase
-    .from("players")
-    .update({
-      score: 0,
-      win_streak: 0,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      total_games: 0,
-      last_played: new Date().toISOString(),
-    })
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Reset stats error:", error);
-    return c.json({ error: "Failed to reset stats" }, 500);
-  }
-
-  return c.json(data);
-});
-
-export default player;
+export default app;
