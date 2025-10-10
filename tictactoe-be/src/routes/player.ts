@@ -4,8 +4,9 @@ import type { HonoVariables } from "../types/supabase";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
-// ✅ Auth middleware
+// Auth middleware
 app.use("*", async (c, next) => {
+ 
   const authHeader = c.req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -24,7 +25,6 @@ app.use("*", async (c, next) => {
       return c.json({ error: "Invalid token" }, 401);
     }
 
-    // ✔ เก็บ user object
     c.set("user", user);
     await next();
   } catch (error) {
@@ -33,7 +33,7 @@ app.use("*", async (c, next) => {
   }
 });
 
-// ✅ Get or create player (ส่ง user object)
+// ✅ Helper function: Get or create player
 async function getOrCreatePlayer(user: any) {
   try {
     const { data: player, error } = await supabase
@@ -84,12 +84,21 @@ async function getOrCreatePlayer(user: any) {
     throw error;
   }
 }
-
-// ✅ GET /api/player/stats — ใช้ user จาก middleware
+// GET /api/player/stats
 app.get("/stats", async (c) => {
   try {
-    const user = c.get("user");
-    const player = await getOrCreatePlayer(user);
+    const userId = c.req.query("userId");
+
+    if (!userId) {
+      return c.json({ error: "userId is required" }, 400);
+    }
+
+    console.log("📊 Getting stats for:", userId);
+
+    // ✅ Get or create player
+    const player = await getOrCreatePlayer(userId);
+
+    console.log("✅ Stats found:", player);
     return c.json(player);
   } catch (error) {
     console.error("❌ Get stats error:", error);
@@ -97,52 +106,80 @@ app.get("/stats", async (c) => {
   }
 });
 
-// ✅ POST /api/player/stats — ไม่ต้องส่ง userId
+// POST /api/player/stats
 app.post("/stats", async (c) => {
   try {
-    const user = c.get("user");
-    const { result, difficulty } = await c.req.json();
+    const { userId, result, difficulty } = await c.req.json();
 
-    if (!result || !difficulty) {
+    if (!userId || !result || !difficulty) {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
-    const player = await getOrCreatePlayer(user);
+    console.log("💾 Updating stats:", { userId, result, difficulty });
 
-    let { score, win_streak, wins, losses, draws } = player;
+    // ✅ Get or create player first
+    const player = await getOrCreatePlayer(userId);
 
+    const currentScore = player.score || 0;
+    const currentWinStreak = player.win_streak || 0;
+    const wins = player.wins || 0;
+    const losses = player.losses || 0;
+    const draws = player.draws || 0;
+
+    let newScore = currentScore;
+    let newWinStreak = currentWinStreak;
+    let newWins = wins;
+    let newLosses = losses;
+    let newDraws = draws;
+
+    // Calculate new stats
     if (result === "win") {
-      score += 1;
-      win_streak += 1;
-      wins += 1;
+      newScore += 1;
+      newWinStreak += 1;
+      newWins += 1;
+      console.log("🏆 Win! New score:", newScore, "Streak:", newWinStreak);
     } else if (result === "lose") {
-      score = Math.max(0, score - 1);
-      win_streak = 0;
-      losses += 1;
+      newScore = Math.max(0, newScore - 1);
+      newWinStreak = 0;
+      newLosses += 1;
+      console.log("😢 Loss! New score:", newScore);
     } else if (result === "draw") {
-      win_streak = 0;
-      draws += 1;
+      newWinStreak = 0;
+      newDraws += 1;
+      console.log("🤝 Draw! Score unchanged");
     }
 
+    // Update player
     const { data, error } = await supabase
       .from("players")
       .update({
-        score,
-        win_streak,
-        wins,
-        losses,
-        draws,
+        score: newScore,
+        win_streak: newWinStreak,
+        wins: newWins,
+        losses: newLosses,
+        draws: newDraws,
         updated_at: new Date().toISOString(),
       })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Update error:", error);
+      throw error;
+    }
+
+    console.log("✅ Stats updated:", data);
     return c.json(data);
   } catch (error) {
     console.error("❌ Update stats error:", error);
-    return c.json({ error: "Failed to update stats" }, 500);
+    return c.json(
+      {
+        error: "Failed to update stats",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
   }
 });
 
