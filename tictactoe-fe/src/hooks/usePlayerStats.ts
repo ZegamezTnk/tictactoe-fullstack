@@ -51,7 +51,6 @@ export const usePlayerStats = (userId?: string) => {
     }
   };
 
-  // Load stats function
   const loadStats = useCallback(async () => {
     if (!userId) {
       setLoading(false);
@@ -76,7 +75,7 @@ export const usePlayerStats = (userId?: string) => {
       console.log('✅ Stats loaded:', data);
 
       setScore(data.score || 0);
-      setWinStreak(data.current_win_streak || 0);
+      setWinStreak(data.win_streak || 0);
       setStats({
         wins: data.wins || 0,
         losses: data.losses || 0,
@@ -124,9 +123,9 @@ export const usePlayerStats = (userId?: string) => {
       const data = await response.json();
       console.log('✅ Stats saved:', data);
 
-      // ✅ Update local state immediately
+      
       setScore(data.score || 0);
-      setWinStreak(data.current_win_streak || 0);
+      setWinStreak(data.win_streak || 0);
       setStats({
         wins: data.wins || 0,
         losses: data.losses || 0,
@@ -136,7 +135,7 @@ export const usePlayerStats = (userId?: string) => {
         hardWins: data.hardWins || 0,
       });
 
-      // ✅ Refresh from server to ensure consistency
+  
       setTimeout(() => {
         loadStats();
       }, 500);

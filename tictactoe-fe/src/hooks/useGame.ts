@@ -21,7 +21,7 @@ export const useGame = (
     winningLine: null
   });
 
-  // Save difficulty to memory (not localStorage - artifacts don't support it)
+
   useEffect(() => {
     console.log('🎮 Game difficulty set to:', difficulty);
   }, [difficulty]);
@@ -61,7 +61,7 @@ export const useGame = (
       } catch (error) {
         console.error('❌ Failed to update stats:', error);
         
-        // Still show game result even if stats fail
+    
         setGameState(prev => ({
           ...prev,
           squares: finalSquares,

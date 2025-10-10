@@ -48,7 +48,7 @@ async function getOrCreatePlayer(userId: string) {
         .insert({
           user_id: userId,
           score: 0,
-          current_win_streak: 0,
+          win_streak: 0,
           wins: 0,
           losses: 0,
           draws: 0,
@@ -113,7 +113,7 @@ app.post('/stats', async (c) => {
     const player = await getOrCreatePlayer(userId);
 
     const currentScore = player.score || 0;
-    const currentWinStreak = player.current_win_streak || 0;
+    const currentWinStreak = player.win_streak || 0;
     const wins = player.wins || 0;
     const losses = player.losses || 0;
     const draws = player.draws || 0;
@@ -146,7 +146,7 @@ app.post('/stats', async (c) => {
       .from('players')
       .update({
         score: newScore,
-        current_win_streak: newWinStreak,
+        win_streak: newWinStreak,
         wins: newWins,
         losses: newLosses,
         draws: newDraws,
