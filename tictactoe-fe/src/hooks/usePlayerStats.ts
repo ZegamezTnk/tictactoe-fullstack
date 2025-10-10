@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabaseClient } from '../config/supabase';
 import { BotDifficulty } from '../types';
 
@@ -29,55 +29,81 @@ export const usePlayerStats = (userId?: string) => {
   const [loading, setLoading] = useState(true);
 
   const getAuthToken = async () => {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    return session?.access_token;
+    try {
+      const { data: { session }, error } = await supabaseClient.auth.getSession();
+      
+      if (error) {
+        console.error('Get session error:', error);
+        const { data: refreshData } = await supabaseClient.auth.refreshSession();
+        return refreshData.session?.access_token;
+      }
+      
+      if (!session?.access_token) {
+        console.warn('⚠️ No access token - attempting refresh...');
+        const { data: refreshData } = await supabaseClient.auth.refreshSession();
+        return refreshData.session?.access_token;
+      }
+      
+      return session.access_token;
+    } catch (error) {
+      console.error('❌ Failed to get auth token:', error);
+      return null;
+    }
   };
 
-  useEffect(() => {
-    const loadStats = async () => {
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
+  // Load stats function
+  const loadStats = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
 
-      try {
-        const token = await getAuthToken();
-        
-        const response = await fetch(`${API_URL}/api/player/stats?userId=${userId}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+    try {
+      console.log('📊 Loading stats for user:', userId);
+      
+      const token = await getAuthToken();
+      
+      const response = await fetch(`${API_URL}/api/player/stats?userId=${userId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-        if (!response.ok) throw new Error('Failed to load stats');
+      if (!response.ok) throw new Error('Failed to load stats');
 
-        const data = await response.json();
+      const data = await response.json();
+      console.log('✅ Stats loaded:', data);
 
-        setScore(data.score || 0);
-        setWinStreak(data.winStreak || 0);
-        setStats({
-          wins: data.wins || 0,
-          losses: data.losses || 0,
-          draws: data.draws || 0,
-          easyWins: data.easyWins || 0,
-          mediumWins: data.mediumWins || 0,
-          hardWins: data.hardWins || 0,
-        });
-      } catch (error) {
-        console.error('❌ Failed to load stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStats();
+      setScore(data.score || 0);
+      setWinStreak(data.current_win_streak || 0);
+      setStats({
+        wins: data.wins || 0,
+        losses: data.losses || 0,
+        draws: data.draws || 0,
+        easyWins: data.easyWins || 0,
+        mediumWins: data.mediumWins || 0,
+        hardWins: data.hardWins || 0,
+      });
+    } catch (error) {
+      console.error('❌ Failed to load stats:', error);
+    } finally {
+      setLoading(false);
+    }
   }, [userId]);
 
+  // Initial load
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  // Update stats
   const updateStats = async (result: GameResult, difficulty: BotDifficulty) => {
     if (!userId) return;
 
     try {
+      console.log('💾 Saving stats:', { result, difficulty, userId });
+
       const token = await getAuthToken();
       if (!token) throw new Error('No auth token');
 
@@ -96,21 +122,29 @@ export const usePlayerStats = (userId?: string) => {
       }
 
       const data = await response.json();
+      console.log('✅ Stats saved:', data);
 
-      setScore(data.score || score);
-      setWinStreak(data.current_win_streak || winStreak);
+      // ✅ Update local state immediately
+      setScore(data.score || 0);
+      setWinStreak(data.current_win_streak || 0);
       setStats({
-        wins: data.wins || stats.wins,
-        losses: data.losses || stats.losses,
-        draws: data.draws || stats.draws,
-        easyWins: data.easyWins || stats.easyWins,
-        mediumWins: data.mediumWins || stats.mediumWins,
-        hardWins: data.hardWins || stats.hardWins,
+        wins: data.wins || 0,
+        losses: data.losses || 0,
+        draws: data.draws || 0,
+        easyWins: data.easyWins || 0,
+        mediumWins: data.mediumWins || 0,
+        hardWins: data.hardWins || 0,
       });
+
+      // ✅ Refresh from server to ensure consistency
+      setTimeout(() => {
+        loadStats();
+      }, 500);
+
     } catch (error) {
       console.error('❌ Failed to save stats:', error);
     }
   };
 
-  return { score, winStreak, stats, loading, updateStats };
+  return { score, winStreak, stats, loading, updateStats, refreshStats: loadStats };
 };

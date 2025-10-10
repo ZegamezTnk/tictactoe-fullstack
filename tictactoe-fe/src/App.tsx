@@ -17,7 +17,7 @@ import authService from './services/authService';
 
 const App: React.FC = () => {
   const { user, isLoading: authLoading, logout } = useAuth();
-  const { score, winStreak, stats, loading: statsLoading, updateStats } = usePlayerStats(user?.id);
+  const { score, winStreak, stats, loading: statsLoading, updateStats , refreshStats} = usePlayerStats(user?.id);
   const [difficulty, setDifficulty] = useState<BotDifficulty>('medium');
   const [isProcessingCallback, setIsProcessingCallback] = useState(false);
 
@@ -48,27 +48,33 @@ const App: React.FC = () => {
     handleOAuthCallback();
   }, []);
 
-  // Create onGameEnd wrapper for useGame
-  const onGameEnd = async (result: 'win' | 'loss' | 'draw') => {
-    console.log('🎮 Game ended with result:', result);
+// Create onGameEnd wrapper for useGame
+const onGameEnd = async (result: 'win' | 'loss' | 'draw') => {
+  console.log('🎮 Game ended with result:', result);
+  
+  try {
+    // Map 'loss' to 'lose' for updateStats
+    const statsResult = result === 'loss' ? 'lose' : result;
     
-    try {
-      // Map 'loss' to 'lose' for updateStats
-      const statsResult = result === 'loss' ? 'lose' : result;
-      
-      await updateStats(statsResult, difficulty);
-      
-      // Check if bonus should be awarded (3 wins in a row)
-      const bonusAwarded = result === 'win' && winStreak >= 2;
-      
-      console.log('✅ Stats updated. Bonus:', bonusAwarded);
-      
-      return { bonusAwarded };
-    } catch (error) {
-      console.error('❌ Failed to update stats:', error);
-      return { bonusAwarded: false };
-    }
-  };
+    await updateStats(statsResult, difficulty);
+    
+    // ✅ Wait a bit for server to update
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // ✅ Refresh stats to show latest data
+    await refreshStats();
+    
+    // Check if bonus should be awarded (3 wins in a row)
+    const bonusAwarded = result === 'win' && winStreak >= 2;
+    
+    console.log('✅ Stats updated and refreshed. Bonus:', bonusAwarded);
+    
+    return { bonusAwarded };
+  } catch (error) {
+    console.error('❌ Failed to update stats:', error);
+    return { bonusAwarded: false };
+  }
+};
 
   const { gameState, handleSquareClick, resetGame } = useGame(onGameEnd, difficulty);
 
